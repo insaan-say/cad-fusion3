@@ -1,0 +1,201 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ORGANIZATION_ADMIN
+  ENGINEER
+  TECHNICIAN
+  VIEWER
+}
+
+enum TransferStatus {
+  DRAFT
+  APPROVAL
+  IN_PROGRESS
+  COMPLETE
+  BLOCKED
+}
+
+enum AssetFormat {
+  STEP
+  STL
+  OBJ
+  GLB
+  THREE_D_PDF
+  DRAWING
+  BOM
+  PROCESS_DOCUMENT
+}
+
+enum RecommendationCategory {
+  COST
+  WEIGHT
+  MANUFACTURING
+  MATERIAL
+  DIMENSION
+}
+
+model Organization {
+  id               String              @id @default(cuid())
+  name             String
+  domain           String?             @unique
+  classification   String?
+  users            UserProfile[]
+  ownedAssets      EngineeringAsset[]  @relation("AssetOwner")
+  sentTransfers    TechnologyTransfer[] @relation("TransferSender")
+  receivedTransfers TechnologyTransfer[] @relation("TransferReceiver")
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+}
+
+model UserProfile {
+  id             String        @id @default(cuid())
+  authUserId     String        @unique
+  email          String        @unique
+  fullName       String
+  role           UserRole      @default(VIEWER)
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  organizationId String
+  approvals      Approval[]
+  auditLogs      AuditLog[]
+  annotations    Annotation[]
+  changes        AssetVersion[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model EngineeringAsset {
+  id             String          @id @default(cuid())
+  owner          Organization    @relation("AssetOwner", fields: [ownerId], references: [id])
+  ownerId        String
+  name           String
+  description    String?
+  format         AssetFormat
+  currentVersion String
+  storageBucket  String
+  storagePath    String
+  checksum       String
+  classification String
+  metadata       Json
+  versions       AssetVersion[]
+  transferFiles  TransferFile[]
+  annotations    Annotation[]
+  recommendations AiRecommendation[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model AssetVersion {
+  id          String           @id @default(cuid())
+  asset       EngineeringAsset @relation(fields: [assetId], references: [id])
+  assetId     String
+  version     String
+  previous    String?
+  reason      String
+  storagePath String
+  checksum    String
+  changedBy   UserProfile      @relation(fields: [changedById], references: [id])
+  changedById String
+  createdAt   DateTime         @default(now())
+
+  @@unique([assetId, version])
+}
+
+model TechnologyTransfer {
+  id             String        @id @default(cuid())
+  reference      String        @unique
+  title          String
+  sender         Organization  @relation("TransferSender", fields: [senderId], references: [id])
+  senderId       String
+  receiver       Organization  @relation("TransferReceiver", fields: [receiverId], references: [id])
+  receiverId     String
+  status         TransferStatus @default(DRAFT)
+  classification String
+  dueAt          DateTime?
+  files          TransferFile[]
+  approvals      Approval[]
+  auditLogs      AuditLog[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model TransferFile {
+  id          String              @id @default(cuid())
+  transfer    TechnologyTransfer  @relation(fields: [transferId], references: [id])
+  transferId  String
+  asset       EngineeringAsset?   @relation(fields: [assetId], references: [id])
+  assetId     String?
+  name        String
+  format      AssetFormat
+  sizeBytes   BigInt
+  storagePath String
+  encrypted   Boolean             @default(true)
+  approved    Boolean             @default(false)
+  createdAt   DateTime            @default(now())
+}
+
+model Approval {
+  id          String              @id @default(cuid())
+  transfer    TechnologyTransfer  @relation(fields: [transferId], references: [id])
+  transferId  String
+  approver    UserProfile         @relation(fields: [approverId], references: [id])
+  approverId  String
+  decision    String
+  reason      String
+  createdAt   DateTime            @default(now())
+}
+
+model AuditLog {
+  id          String              @id @default(cuid())
+  actor       UserProfile?        @relation(fields: [actorId], references: [id])
+  actorId     String?
+  transfer    TechnologyTransfer? @relation(fields: [transferId], references: [id])
+  transferId  String?
+  action      String
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json
+  createdAt   DateTime            @default(now())
+}
+
+model AiRecommendation {
+  id          String                 @id @default(cuid())
+  asset       EngineeringAsset       @relation(fields: [assetId], references: [id])
+  assetId     String
+  category    RecommendationCategory
+  title       String
+  impact      String
+  confidence  Int
+  accepted    Boolean                @default(false)
+  createdAt   DateTime               @default(now())
+}
+
+model Annotation {
+  id          String           @id @default(cuid())
+  asset       EngineeringAsset @relation(fields: [assetId], references: [id])
+  assetId     String
+  author      UserProfile      @relation(fields: [authorId], references: [id])
+  authorId    String
+  marker      String
+  message     String
+  coordinates Json
+  resolved    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+}
+
+model RepairSession {
+  id          String    @id @default(cuid())
+  machineId   String
+  title       String
+  status      String
+  workflow    Json
+  health      Json
+  startedAt   DateTime  @default(now())
+  closedAt    DateTime?
+}
